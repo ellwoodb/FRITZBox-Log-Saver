@@ -1,0 +1,40 @@
+version: "3.8"
+
+services:
+  fritzbox-log-saver:
+    build: .
+    container_name: fritzbox-log-saver
+    restart: unless-stopped
+    environment:
+      # REQUIRED: FRITZ!Box credentials
+      FRITZBOX_USERNAME: "${FRITZBOX_USERNAME:-}"
+      FRITZBOX_PASSWORD: "${FRITZBOX_PASSWORD:-}"
+
+      # OPTIONAL: Configuration
+      FRITZBOX_URL: "${FRITZBOX_URL:-http://fritz.box}"
+      INTERVAL_MINUTES: "${INTERVAL_MINUTES:-15}"
+      LOG_PATH: "/app/logs/fritzLog.jsonl"
+      TIMEZONE: "${TIMEZONE:-Europe/Berlin}"
+
+      # OPTIONAL: Exclude patterns (comma-separated)
+      # Example: "USB-Speicher,WLAN-Zeitschaltung"
+      EXCLUDE_PATTERNS: "${EXCLUDE_PATTERNS:-}"
+
+    volumes:
+      # Mount logs directory to host
+      - ./logs:/app/logs
+
+    networks:
+      - fritzbox-network
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "./healthcheck.sh"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+networks:
+  fritzbox-network:
+    driver: bridge

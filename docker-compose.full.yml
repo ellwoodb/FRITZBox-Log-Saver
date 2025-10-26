@@ -1,0 +1,78 @@
+version: "3.8"
+
+services:
+  # FRITZ!Box Log Saver
+  fritzbox-log-saver:
+    build: .
+    container_name: fritzbox-log-saver
+    restart: unless-stopped
+    environment:
+      FRITZBOX_USERNAME: "${FRITZBOX_USERNAME:-}"
+      FRITZBOX_PASSWORD: "${FRITZBOX_PASSWORD:-}"
+      FRITZBOX_URL: "${FRITZBOX_URL:-http://fritz.box}"
+      INTERVAL_MINUTES: "${INTERVAL_MINUTES:-15}"
+      LOG_PATH: "/app/logs/fritzLog.jsonl"
+      TIMEZONE: "${TIMEZONE:-Europe/Berlin}"
+      EXCLUDE_PATTERNS: "${EXCLUDE_PATTERNS:-}"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "test", "-f", "/app/logs/fritzLog.jsonl"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Promtail for log shipping
+  promtail:
+    image: grafana/promtail:latest
+    container_name: fritzbox-promtail
+    restart: unless-stopped
+    volumes:
+      - ./logs:/var/log/fritzbox:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - monitoring
+    depends_on:
+      - fritzbox-log-saver
+    environment:
+      - LOKI_URL=${LOKI_URL:-http://loki:3100}
+
+  # Loki for log aggregation (optional)
+  loki:
+    image: grafana/loki:latest
+    container_name: fritzbox-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+    networks:
+      - monitoring
+    command: -config.file=/etc/loki/local-config.yaml
+
+  # Grafana for visualization (optional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fritzbox-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - monitoring
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+
+volumes:
+  loki-data:
+  grafana-data:
+
+networks:
+  monitoring:
+    driver: bridge
